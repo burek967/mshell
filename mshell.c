@@ -10,6 +10,7 @@
 
 #define STR(s) s, sizeof(s)/sizeof(char)-1
 #define ERR(a,b) write(STDERR_FILENO, (a), (b))
+#define ERRS(x) write(STDERR_FILENO, x)
 
 int
 main(int argc, char *argv[])
@@ -28,8 +29,8 @@ main(int argc, char *argv[])
         if(status < 0)
             exit(1);
 	if(status == MAX_LINE_LENGTH+1) {
-	    ERR(STR(SYNTAX_ERROR_STR));
-	    ERR(STR("\n"));
+	    ERRS(STR(SYNTAX_ERROR_STR));
+	    ERRS(STR("\n"));
 	}	
         buffer[status-1] = '\0';
 	
@@ -37,8 +38,8 @@ main(int argc, char *argv[])
         line* l = parseline(buffer);
         command* c = pickfirstcommand(l);
 	if(c == NULL) {
-	    ERR(STR(SYNTAX_ERROR_STR));
-	    ERR(STR("\n"));
+	    ERRS(STR(SYNTAX_ERROR_STR));
+	    ERRS(STR("\n"));
 	}
 
         // Run
@@ -52,13 +53,13 @@ main(int argc, char *argv[])
 	    ERR(*(c->argv), strlen(*(c->argv)));
             switch(errno){
                 case EACCES:
-                    ERR(STR(": permission denied\n"));
+                    ERRS(STR(": permission denied\n"));
 		    break;
                 case ENOENT:
-                    ERR(STR(": no such file or directory\n"));
+                    ERRS(STR(": no such file or directory\n"));
 		    break;
                 default:
-                    ERR(STR(": exec error\n"));
+                    ERRS(STR(": exec error\n"));
 		    break;
             }
             exit(EXEC_FAILURE);
