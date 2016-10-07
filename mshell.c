@@ -8,47 +8,38 @@
 #include "siparse.h"
 #include "utils.h"
 
+#define STR(s) s, sizeof(s)/sizeof(char)-1
+#define ERR(a,b) write(STDERR_FILENO, (a), (b))
+
 int
 main(int argc, char *argv[])
 {
-    /*
-       line * ln;
-       command *com;
-
-       ln = parseline("ls -las | grep k | wc ; echo abc > f1 ;  cat < f2 ; echo abc >> f3\n");
-       printparsedline(ln);
-       printf("\n");
-       com = pickfirstcommand(ln);
-       printcommand(com,1);
-
-       ln = parseline("sleep 3 &");
-       printparsedline(ln);
-       printf("\n");
-
-       ln = parseline("echo  & abc >> f3\n");
-       printparsedline(ln);
-       printf("\n");
-       com = pickfirstcommand(ln);
-       printcommand(com,1);
-       */
     int status;
-    char buffer[MAX_LINE_LENGTH];
+    char buffer[MAX_LINE_LENGTH+1];
 
     while(1){
         // Prompt
-        write(STDOUT_FILENO, "$ ", 2);
+        write(STDOUT_FILENO, STR(PROMPT_STR));
 
         // Read line
-        status = read(STDIN_FILENO, buffer, MAX_LINE_LENGTH);
-        if(!status || status == MAX_LINE_LENGTH)
+        status = read(STDIN_FILENO, buffer, MAX_LINE_LENGTH+1);
+        if(!status)
             break;
         if(status < 0)
             exit(1);
+	if(status == MAX_LINE_LENGTH+1) {
+	    ERR(STR(SYNTAX_ERROR_STR));
+	    ERR(STR("\n"));
+	}	
         buffer[status-1] = '\0';
-
+	
         // Parse
         line* l = parseline(buffer);
         command* c = pickfirstcommand(l);
+	if(c == NULL) {
+	    ERR(STR(SYNTAX_ERROR_STR));
+	    ERR(STR("\n"));
+	}
 
         // Run
         int k = fork();
@@ -58,21 +49,21 @@ main(int argc, char *argv[])
             wait(NULL);
         else {
             execvp(*(c->argv), c->argv);
+	    ERR(*(c->argv), strlen(*(c->argv)));
             switch(errno){
                 case EACCES:
-                    write(STDOUT_FILENO, *(c->argv), strlen(*(c->argv)));
-                    write(STDOUT_FILENO, ": permission denied\n", 20);
-                    exit(EXEC_FAILURE);
+                    ERR(STR(": permission denied\n"));
+		    break;
                 case ENOENT:
-                    write(STDOUT_FILENO, *(c->argv), strlen(*(c->argv)));
-                    write(STDOUT_FILENO, ": no such file or directory\n", 28);
-                    exit(EXEC_FAILURE);
+                    ERR(STR(": no such file or directory\n"));
+		    break;
                 default:
-                    write(STDOUT_FILENO, *(c->argv), strlen(*(c->argv)));
-                    write(STDOUT_FILENO, ": exec error\n", 13);
-                    exit(EXEC_FAILURE);
+                    ERR(STR(": exec error\n"));
+		    break;
             }
+            exit(EXEC_FAILURE);
         }
     }
-    write(STDOUT_FILENO, "\n", 1);
+    write(STDOUT_FILENO, STR("\n"));
+    return 0;
 }
