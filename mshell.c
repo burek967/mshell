@@ -19,7 +19,7 @@ main(int argc, char *argv[])
     char buffer[MAX_LINE_LENGTH+1];
 
     while(1){
-        // Prompt
+        // Print prompt
         write(STDOUT_FILENO, STR(PROMPT_STR));
 
         // Read line
