@@ -8,9 +8,7 @@
 #include "siparse.h"
 #include "utils.h"
 
-#define STR(s) s, sizeof(s)/sizeof(char)-1
-#define ERR(a,b) write(STDERR_FILENO, (a), (b))
-#define ERRS(x) write(STDERR_FILENO, x)
+#define WRITES(fd,x) write(fd, x, sizeof(x)/sizeof(char)-1)
 
 int
 main(int argc, char *argv[])
@@ -20,7 +18,7 @@ main(int argc, char *argv[])
 
     while(1){
         // Print prompt
-        write(STDOUT_FILENO, STR(PROMPT_STR));
+        WRITES(STDOUT_FILENO, PROMPT_STR);
 
         // Read line
         status = read(STDIN_FILENO, buffer, MAX_LINE_LENGTH+1);
@@ -29,8 +27,8 @@ main(int argc, char *argv[])
         if(status < 0)
             exit(1);
 	if(status == MAX_LINE_LENGTH+1) {
-	    ERRS(STR(SYNTAX_ERROR_STR));
-	    ERRS(STR("\n"));
+	    WRITES(STDERR_FILENO, SYNTAX_ERROR_STR);
+	    WRITES(STDERR_FILENO, "\n");
 	}	
         buffer[status-1] = '\0';
 	
@@ -38,8 +36,8 @@ main(int argc, char *argv[])
         line* l = parseline(buffer);
         command* c = pickfirstcommand(l);
 	if(c == NULL) {
-	    ERRS(STR(SYNTAX_ERROR_STR));
-	    ERRS(STR("\n"));
+	    WRITES(STDERR_FILENO, SYNTAX_ERROR_STR);
+	    WRITES(STDERR_FILENO, "\n");
 	}
 
         // Run
@@ -50,21 +48,21 @@ main(int argc, char *argv[])
             wait(NULL);
         else {
             execvp(*(c->argv), c->argv);
-	    ERR(*(c->argv), strlen(*(c->argv)));
+	    write(STDERR_FILENO, *(c->argv), strlen(*(c->argv)));
             switch(errno){
-                case EACCES:
-                    ERRS(STR(": permission denied\n"));
-		    break;
-                case ENOENT:
-                    ERRS(STR(": no such file or directory\n"));
-		    break;
-                default:
-                    ERRS(STR(": exec error\n"));
-		    break;
+	    case EACCES:
+		WRITES(STDERR_FILENO, ": permission denied\n");
+		break;
+	    case ENOENT:
+		WRITES(STDERR_FILENO, ": no such file or directory\n");
+		break;
+	    default:
+		WRITES(STDERR_FILENO, ": exec error\n");
+		break;
             }
             exit(EXEC_FAILURE);
         }
     }
-    write(STDOUT_FILENO, STR("\n"));
+    WRITES(STDOUT_FILENO, "\n");
     return 0;
 }
