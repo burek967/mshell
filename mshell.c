@@ -10,13 +10,14 @@
 
 #define WRITES(fd,x) write(fd, x, sizeof(x)/sizeof(char)-1)
 
+static char buffer[MAX_LINE_LENGTH+1];
+
 int
 main(int argc, char *argv[])
 {
     int status;
-    char buffer[MAX_LINE_LENGTH+1];
 
-    while(1){
+    while(1) {
         // Print prompt
         WRITES(STDOUT_FILENO, PROMPT_STR);
 
@@ -49,7 +50,7 @@ main(int argc, char *argv[])
         else {
             execvp(*(c->argv), c->argv);
 	    write(STDERR_FILENO, *(c->argv), strlen(*(c->argv)));
-            switch(errno){
+            switch(errno) {
 	    case EACCES:
 		WRITES(STDERR_FILENO, ": permission denied\n");
 		break;
