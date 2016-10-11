@@ -8,7 +8,7 @@
 #include "siparse.h"
 #include "utils.h"
 
-#define WRITES(fd,x) write(fd, x, sizeof(x)/sizeof(char)-1)
+#define WRITES(fd,x) write(fd, x, sizeof(x)-sizeof('\n'))
 
 static char buffer[MAX_LINE_LENGTH+1];
 
