@@ -9,27 +9,30 @@
 #include "config.h"
 #include "siparse.h"
 #include "utils.h"
+#include "builtins.h"
 
 #define WRITES(fd,x) write(fd, x, sizeof(x)-sizeof(char))
 
-#define MAX_LINE_LENGTH 10
+//#define MAX_LINE_LENGTH 10
 
 static char buffer[MAX_LINE_LENGTH+1], snd_buffer[MAX_LINE_LENGTH+1];
 static char *buf_end = buffer, *buf2_end = snd_buffer;
 static char *linepos = NULL;
 static struct stat fd_status;
 
-static char* next_line();
-static inline char* find_end(char *start, char *end);
-static inline void copy_to_snd_buf(char *from, char *to);
+static char *next_line();
+static inline char* find_end(char *, char *);
+static inline void copy_to_snd_buf(char *, char *);
 static int read_line();
 static int read_line_if_neccesary();
+static void get_builtin(builtin_pair *, char *);
 
 int
 main(int argc, char *argv[])
 {
-    int status;
+    int status, i;
     int print_prompt;
+    builtin_pair builtin;
     char* nline;
 
     if(fstat(STDOUT_FILENO, &fd_status) == -1)
@@ -49,9 +52,9 @@ main(int argc, char *argv[])
             WRITES(STDERR_FILENO, "\n");
             continue;
         }	
-        if(*nline == '\0')
+        if(buf_end == buffer)
             break;
-        puts(nline);
+
         // Parse
         line* l = parseline(nline);
         command* c = pickfirstcommand(l);
@@ -61,8 +64,16 @@ main(int argc, char *argv[])
         }
 
         // Run
-        //printparsedline(l);
-        //continue;
+        get_builtin(&builtin, *(c->argv));
+        if(builtin.fun != NULL){
+            if(builtin.fun(c->argv) != 0){
+                WRITES(STDERR_FILENO, "Builtin '");
+                write(STDERR_FILENO, builtin.name, strlen(builtin.name));
+                WRITES(STDERR_FILENO, "' failed.\n");
+            }
+            continue;
+        }
+        
         int k = fork();
         if(k < 0)
             exit(2);
@@ -85,8 +96,24 @@ main(int argc, char *argv[])
             exit(EXEC_FAILURE);
         }
     }
-    WRITES(STDOUT_FILENO, "\n");
     return 0;
+}
+
+void get_builtin(builtin_pair *pair, char *cmd){
+    if(cmd == NULL){
+        pair->name = pair->fun = NULL;
+        return;
+    }
+    builtin_pair *i = builtins_table;
+    while(i->name){
+        if(strcmp(i->name, cmd) == 0){
+            pair->name = i->name;
+            pair->fun  = i->fun;
+            return;
+        }
+        i++;
+    }
+    pair->name = pair->fun = NULL;
 }
 
 int read_line_if_neccesary(){
@@ -101,7 +128,6 @@ int read_line(){
         return status;
     linepos = buffer;
     buf_end = buffer + status;
-    // *buf_end = '\0';
     return status;
 }
 
@@ -121,7 +147,6 @@ inline void copy_to_snd_buf(char *from, char *to){
 }
 
 char* next_line(){
-
     int l = read_line_if_neccesary();
     if(l < 0)
         return NULL;
