@@ -18,7 +18,6 @@
 static char buffer[MAX_LINE_LENGTH+1], snd_buffer[MAX_LINE_LENGTH+1];
 static char *buf_end = buffer, *buf2_end = snd_buffer;
 static char *linepos = NULL;
-static struct stat fd_status;
 
 static char *next_line();
 static inline char* find_end(char *, char *);
@@ -33,6 +32,7 @@ main(int argc, char *argv[])
     int status, i;
     int print_prompt;
     builtin_pair builtin;
+    struct stat fd_status;
     char* nline;
 
     if(fstat(STDOUT_FILENO, &fd_status) == -1)
@@ -56,8 +56,8 @@ main(int argc, char *argv[])
             break;
 
         // Parse
-        line* l = parseline(nline);
-        command* c = pickfirstcommand(l);
+        line *l = parseline(nline);
+        command *c = pickfirstcommand(l);
         if(c == NULL) {
             WRITES(STDERR_FILENO, SYNTAX_ERROR_STR);
             WRITES(STDERR_FILENO, "\n");
@@ -73,7 +73,7 @@ main(int argc, char *argv[])
             }
             continue;
         }
-        
+
         int k = fork();
         if(k < 0)
             exit(2);
@@ -101,7 +101,8 @@ main(int argc, char *argv[])
 
 void get_builtin(builtin_pair *pair, char *cmd){
     if(cmd == NULL){
-        pair->name = pair->fun = NULL;
+        pair->name = NULL;
+        pair->fun = NULL;
         return;
     }
     builtin_pair *i = builtins_table;
@@ -113,7 +114,8 @@ void get_builtin(builtin_pair *pair, char *cmd){
         }
         i++;
     }
-    pair->name = pair->fun = NULL;
+    pair->name = NULL;
+    pair->fun = NULL;
 }
 
 int read_line_if_neccesary(){
@@ -124,18 +126,27 @@ int read_line_if_neccesary(){
 
 int read_line(){
     int status = read(STDIN_FILENO, buffer, MAX_LINE_LENGTH);
-    if(status < 0)
-        return status;
+    if(status < 0){
+	if(errno = EINTR)
+	    return read_line();
+	return status;
+    }
     linepos = buffer;
     buf_end = buffer + status;
     return status;
 }
 
-inline char* find_end(char *start, char *end){
+inline char * find_end(char *start, char *end){
     while(*start != '\n' && start != end)
         ++start;
     return start;
 }
+
+/*
+ * Copy characters from given range to buf2_end and move buf2_end after copied
+ * characters. If given characters won't fit into snd_buffer, set buf2_end to
+ * snd_buffer.
+ */
 
 inline void copy_to_snd_buf(char *from, char *to){
     if((to-from) + (buf2_end - snd_buffer) > MAX_LINE_LENGTH)
@@ -146,7 +157,12 @@ inline void copy_to_snd_buf(char *from, char *to){
     }
 }
 
-char* next_line(){
+/* 
+ * Return 0-terminated string containing next line for parse. If the line is too
+ * long or read errors occured, return NULL.
+ */
+
+char * next_line(){
     int l = read_line_if_neccesary();
     if(l < 0)
         return NULL;
@@ -159,7 +175,7 @@ char* next_line(){
 
     // command ended
 
-    if(ret != buf_end){
+    if(ret != buf_end || buf_end == buffer){
         *ret = '\0';
         char *x = linepos;
         linepos = ret+1;
@@ -171,17 +187,21 @@ char* next_line(){
     buf2_end = snd_buffer;
     copy_to_snd_buf(linepos, ret);
     while(1) {
-        if((l = read_line()) < 0)
+        if(read_line() < 0)
             return NULL;
-        /*if(l == 0){
-            linepos = NULL;
-            *buf2_end = '\0';
-            return snd_buffer;
-        }*/
         ret = find_end(linepos, buf_end);
         copy_to_snd_buf(linepos, ret);
         if(buf2_end == snd_buffer){
             linepos = (ret == buf_end ? NULL : ret+1);
+	    while(linepos == NULL) {
+		if(read_line() < 0)
+		    break;
+		ret = find_end(linepos, buf_end);
+		if(ret != buf_end)
+		    linepos = ret+1;
+		else
+		    linepos = NULL;
+	    }
             return NULL;
         }
         if(ret != buf_end){
