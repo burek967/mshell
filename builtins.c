@@ -63,7 +63,7 @@ lls(char * argv[])
 		if(*(en->d_name) == '.')
 			continue;
 		write(STDOUT_FILENO, en->d_name, strlen(en->d_name));
-		write(STDOUT_FILENO, "\n", 1);
+		WRITES(STDOUT_FILENO, "\n");
 	}
 	closedir(dir);
 	return 0;
@@ -77,7 +77,7 @@ lkill(char * argv[])
 	if(argv[1] == NULL)
 		return 1;
 	if(*(argv[1]) == '-'){
-		sig = strtol(argv[1], &end, 10);
+		sig = strtol(argv[1]+1, &end, 10);
 		if(end != NULL)
 			return 1;
 		if(argv[2] == NULL)
