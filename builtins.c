@@ -9,7 +9,7 @@
 
 #define WRITES(fd,x) write(fd, x, sizeof(x)-sizeof(char))
 
-int echo(char*[]);
+int echo(char *[]);
 int undefined(char *[]);
 int lexit(char *[]);
 int lls(char *[]);
@@ -26,7 +26,7 @@ builtin_pair builtins_table[]={
 };
 
 int 
-echo( char * argv[])
+echo(char * argv[])
 {
 	int i =1;
 	if (argv[i]) printf("%s", argv[i++]);
@@ -57,7 +57,7 @@ lls(char * argv[])
 {
 	DIR *dir = opendir(".");
 	if(dir == NULL)
-		return 1;
+		return BUILTIN_ERROR;
 	struct dirent *en;
 	while((en = readdir(dir)) != NULL){
 		if(*(en->d_name) == '.')
@@ -75,25 +75,25 @@ lkill(char * argv[])
 	int pid, sig = SIGTERM;
 	char *end = NULL;
 	if(argv[1] == NULL)
-		return 1;
+		return BUILTIN_ERROR;
 	if(*(argv[1]) == '-'){
 		sig = strtol(argv[1]+1, &end, 10);
-		if(end != NULL)
-			return 1;
+		if(*end != '\0')
+			return BUILTIN_ERROR;
 		if(argv[2] == NULL)
-			return 1;
+			return BUILTIN_ERROR;
 		pid = strtol(argv[2], &end, 10);
-		if(end != NULL)
-			return 1;
+		if(*end != '\0')
+			return BUILTIN_ERROR;
 		if(kill(pid, sig) == -1)
-			return 1;
+			return BUILTIN_ERROR;
 		return 0;
 	}
 	pid = strtol(argv[1], &end, 10);
-	if(end != NULL)
-		return 1;
+	if(*end != '\0')
+		return BUILTIN_ERROR;
 	if(kill(pid, sig) == -1)
-		return 1;
+		return BUILTIN_ERROR;
 	return 0;
 }
 
@@ -103,12 +103,12 @@ lcd(char * argv[])
 	if(argv[1] == NULL){
 		char *home = getenv("HOME");
 		if(home == NULL)
-			return 1;
+			return BUILTIN_ERROR;
 		if(chdir(home) == -1)
-			return 1;
+			return BUILTIN_ERROR;
 		return 0;
 	}
 	if(chdir(argv[1]) == -1)
-		return 1;
+		return BUILTIN_ERROR;
 	return 0;
 }

@@ -67,9 +67,9 @@ main(int argc, char *argv[])
         get_builtin(&builtin, *(c->argv));
         if(builtin.fun != NULL){
             if(builtin.fun(c->argv) != 0){
-                WRITES(STDERR_FILENO, "Builtin '");
+                WRITES(STDERR_FILENO, "Builtin ");
                 write(STDERR_FILENO, builtin.name, strlen(builtin.name));
-                WRITES(STDERR_FILENO, "' failed.\n");
+                WRITES(STDERR_FILENO, " error.\n");
             }
             continue;
         }
