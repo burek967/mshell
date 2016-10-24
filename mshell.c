@@ -6,30 +6,24 @@
 #include <errno.h>
 #include <stdio.h>
 
+#include "myutils.h"
 #include "config.h"
 #include "siparse.h"
 #include "utils.h"
 #include "builtins.h"
-
-#define WRITES(fd,x) write(fd, x, sizeof(x)-sizeof(char))
-
-//#define MAX_LINE_LENGTH 10
 
 static char buffer[MAX_LINE_LENGTH+1], snd_buffer[MAX_LINE_LENGTH+1];
 static char *buf_end = buffer, *buf2_end = snd_buffer;
 static char *linepos = NULL;
 
 static char *next_line();
-static inline char* find_end(char *, char *);
-static inline void copy_to_snd_buf(char *, char *);
 static int read_line();
+static inline void copy_to_snd_buf(const char *, char *);
 static int read_line_if_neccesary();
-static void get_builtin(builtin_pair *, char *);
 
 int
 main(int argc, char *argv[])
 {
-    int status, i;
     int print_prompt;
     builtin_pair builtin;
     struct stat fd_status;
@@ -99,25 +93,6 @@ main(int argc, char *argv[])
     return 0;
 }
 
-void get_builtin(builtin_pair *pair, char *cmd){
-    if(cmd == NULL){
-        pair->name = NULL;
-        pair->fun = NULL;
-        return;
-    }
-    builtin_pair *i = builtins_table;
-    while(i->name){
-        if(strcmp(i->name, cmd) == 0){
-            pair->name = i->name;
-            pair->fun  = i->fun;
-            return;
-        }
-        i++;
-    }
-    pair->name = NULL;
-    pair->fun = NULL;
-}
-
 int read_line_if_neccesary(){
     if(linepos == NULL || linepos == buf_end)
         return read_line();
@@ -127,7 +102,7 @@ int read_line_if_neccesary(){
 int read_line(){
     int status = read(STDIN_FILENO, buffer, MAX_LINE_LENGTH);
     if(status < 0){
-	if(errno = EINTR)
+	if(errno == EINTR)
 	    return read_line();
 	return status;
     }
@@ -136,19 +111,13 @@ int read_line(){
     return status;
 }
 
-inline char * find_end(char *start, char *end){
-    while(*start != '\n' && start != end)
-        ++start;
-    return start;
-}
-
 /*
  * Copy characters from given range to buf2_end and move buf2_end after copied
  * characters. If given characters won't fit into snd_buffer, set buf2_end to
  * snd_buffer.
  */
 
-inline void copy_to_snd_buf(char *from, char *to){
+inline void copy_to_snd_buf(const char *from, char *to){
     if((to-from) + (buf2_end - snd_buffer) > MAX_LINE_LENGTH)
         buf2_end = snd_buffer;
     else {
@@ -171,7 +140,7 @@ char * next_line(){
         return buffer;
     }
 
-    char *ret = find_end(linepos, buf_end);
+    char *ret = find_line_end(linepos, buf_end);
 
     // command ended
 
@@ -189,14 +158,14 @@ char * next_line(){
     while(1) {
         if(read_line() < 0)
             return NULL;
-        ret = find_end(linepos, buf_end);
+        ret = find_line_end(linepos, buf_end);
         copy_to_snd_buf(linepos, ret);
         if(buf2_end == snd_buffer){
             linepos = (ret == buf_end ? NULL : ret+1);
 	    while(linepos == NULL) {
 		if(read_line() < 0)
 		    break;
-		ret = find_end(linepos, buf_end);
+		ret = find_line_end(linepos, buf_end);
 		if(ret != buf_end)
 		    linepos = ret+1;
 		else

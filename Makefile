@@ -1,9 +1,9 @@
 INC=-Iinclude
-CFLAGS=$(INC)
+CFLAGS=$(INC) -Wall
 
 PARSERDIR=input_parse
 
-SRCS=utils.c mshell.c builtins.c
+SRCS=utils.c mshell.c builtins.c myutils.c
 OBJS:=$(SRCS:.c=.o)
 
 all: mshell 

@@ -5,9 +5,8 @@
 #include <dirent.h>
 #include <signal.h>
 
+#include "myutils.h"
 #include "builtins.h"
-
-#define WRITES(fd,x) write(fd, x, sizeof(x)-sizeof(char))
 
 int echo(char *[]);
 int undefined(char *[]);
@@ -17,98 +16,98 @@ int lkill(char *[]);
 int lcd(char *[]);
 
 builtin_pair builtins_table[]={
-	{"exit",	&lexit},
-	{"lecho",	&echo},
-	{"lcd",		&lcd},
-	{"lkill",	&lkill},
-	{"lls",		&lls},
-	{NULL,NULL}
+    {"exit",	&lexit},
+    {"lecho",	&echo},
+    {"lcd",		&lcd},
+    {"lkill",	&lkill},
+    {"lls",		&lls},
+    {NULL,NULL}
 };
 
 int 
 echo(char * argv[])
 {
-	int i =1;
-	if (argv[i]) printf("%s", argv[i++]);
-	while  (argv[i])
-		printf(" %s", argv[i++]);
+    int i =1;
+    if (argv[i]) printf("%s", argv[i++]);
+    while  (argv[i])
+	printf(" %s", argv[i++]);
 
-	printf("\n");
-	fflush(stdout);
-	return 0;
+    printf("\n");
+    fflush(stdout);
+    return 0;
 }
 
 int 
 undefined(char * argv[])
 {
-	fprintf(stderr, "Command %s undefined.\n", argv[0]);
-	return BUILTIN_ERROR;
+    fprintf(stderr, "Command %s undefined.\n", argv[0]);
+    return BUILTIN_ERROR;
 }
 
 int
 lexit(char * argv[])
 {
-	exit(0);
-	return 0;
+    exit(0);
+    return 0;
 }
 
 int
 lls(char * argv[])
 {
-	DIR *dir = opendir(".");
-	if(dir == NULL)
-		return BUILTIN_ERROR;
-	struct dirent *en;
-	while((en = readdir(dir)) != NULL){
-		if(*(en->d_name) == '.')
-			continue;
-		write(STDOUT_FILENO, en->d_name, strlen(en->d_name));
-		WRITES(STDOUT_FILENO, "\n");
-	}
-	closedir(dir);
-	return 0;
+    DIR *dir = opendir(".");
+    if(dir == NULL)
+	return BUILTIN_ERROR;
+    struct dirent *en;
+    while((en = readdir(dir)) != NULL){
+	if(*(en->d_name) == '.')
+	    continue;
+	write(STDOUT_FILENO, en->d_name, strlen(en->d_name));
+	WRITES(STDOUT_FILENO, "\n");
+    }
+    closedir(dir);
+    return 0;
 }
 
 int
 lkill(char * argv[])
 {
-	int pid, sig = SIGTERM;
-	char *end = NULL;
-	if(argv[1] == NULL)
-		return BUILTIN_ERROR;
-	if(*(argv[1]) == '-'){
-		sig = strtol(argv[1]+1, &end, 10);
-		if(*end != '\0')
-			return BUILTIN_ERROR;
-		if(argv[2] == NULL)
-			return BUILTIN_ERROR;
-		pid = strtol(argv[2], &end, 10);
-		if(*end != '\0')
-			return BUILTIN_ERROR;
-		if(kill(pid, sig) == -1)
-			return BUILTIN_ERROR;
-		return 0;
-	}
+    int pid, sig = SIGTERM;
+    char *end = NULL;
+    if(argv[1] == NULL)
+	return BUILTIN_ERROR;
+    if(*(argv[1]) == '-'){
+	sig = strtol(argv[1]+1, &end, 10);
+	if(*end != '\0')
+	    return BUILTIN_ERROR;
+	if(argv[2] == NULL)
+	    return BUILTIN_ERROR;
+	pid = strtol(argv[2], &end, 10);
+	if(*end != '\0')
+	    return BUILTIN_ERROR;
+    } else {
 	pid = strtol(argv[1], &end, 10);
 	if(*end != '\0')
-		return BUILTIN_ERROR;
-	if(kill(pid, sig) == -1)
-		return BUILTIN_ERROR;
-	return 0;
+	    return BUILTIN_ERROR;
+    }
+    if(kill(pid, sig) == -1)
+	return BUILTIN_ERROR;
+    return 0;
 }
 
 int
 lcd(char * argv[])
 {
-	if(argv[1] == NULL){
-		char *home = getenv("HOME");
-		if(home == NULL)
-			return BUILTIN_ERROR;
-		if(chdir(home) == -1)
-			return BUILTIN_ERROR;
-		return 0;
-	}
-	if(chdir(argv[1]) == -1)
-		return BUILTIN_ERROR;
+    if(argv[1] == NULL){
+	char *home = getenv("HOME");
+	if(home == NULL)
+	    return BUILTIN_ERROR;
+	if(chdir(home) == -1)
+	    return BUILTIN_ERROR;
 	return 0;
+    }
+    if(argv[2] != NULL)
+	return BUILTIN_ERROR;
+    if(chdir(argv[1]) == -1)
+	return BUILTIN_ERROR;
+    return 0;
 }
