@@ -2,10 +2,13 @@
 
 #include <string.h>
 #include <unistd.h>
+#include <errno.h>
 
 #include "myutils.h"
 
-void get_builtin(builtin_pair *pair, const char *cmd){
+void
+get_builtin(builtin_pair *pair, const char *cmd)
+{
     if(cmd == NULL){
 	pair->name = NULL;
 	pair->fun = NULL;
@@ -23,8 +26,41 @@ void get_builtin(builtin_pair *pair, const char *cmd){
     pair->fun = NULL;
 }
 
-char * find_line_end(char *start, char *end){
-    while(*start != '\n' && start != end)
-        ++start;
-    return start;
+int
+read_line(struct line_buffer *buffer)
+{
+    int status = read(STDIN_FILENO, buffer->line, MAX_LINE_LENGTH);
+    if(status < 0){
+	if(errno == EINTR)
+	    return read_line(buffer);
+	return status;
+    }
+    buffer->pos = buffer->line;
+    buffer->end = buffer->line + status;
+    return status;
+}
+
+int
+skip_to_end(struct line_buffer *buffer)
+{
+    char *x;
+    int k;
+    if(buffer->pos != NULL){
+	x = find_line_end(buffer);
+	if(x != buffer->end){
+	    buffer->pos = x+1;
+	    return 0;
+	}
+    }
+
+    do {
+	if((k = read_line(buffer)) <= 0)
+	    return k;
+	x = find_line_end(buffer);
+	if(x != buffer->end) {
+	    buffer->pos = x+1;
+	    break;
+	}
+    } while(1);
+    return 0;
 }

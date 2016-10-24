@@ -12,14 +12,9 @@
 #include "utils.h"
 #include "builtins.h"
 
-static char buffer[MAX_LINE_LENGTH+1], snd_buffer[MAX_LINE_LENGTH+1];
-static char *buf_end = buffer, *buf2_end = snd_buffer;
-static char *linepos = NULL;
+static struct line_buffer prim_buf, snd_buf;
 
 static char *next_line();
-static int read_line();
-static inline void copy_to_snd_buf(const char *, char *);
-static int read_line_if_neccesary();
 
 int
 main(int argc, char *argv[])
@@ -28,6 +23,10 @@ main(int argc, char *argv[])
     builtin_pair builtin;
     struct stat fd_status;
     char* nline;
+
+    prim_buf.end = prim_buf.line;
+    snd_buf.end = snd_buf.line;
+    prim_buf.pos = snd_buf.pos = NULL;
 
     if(fstat(STDOUT_FILENO, &fd_status) == -1)
         exit(2);
@@ -46,7 +45,7 @@ main(int argc, char *argv[])
             WRITES(STDERR_FILENO, "\n");
             continue;
         }	
-        if(buf_end == buffer)
+        if(prim_buf.end == prim_buf.line)
             break;
 
         // Parse
@@ -93,90 +92,46 @@ main(int argc, char *argv[])
     return 0;
 }
 
-int read_line_if_neccesary(){
-    if(linepos == NULL || linepos == buf_end)
-        return read_line();
-    return buf_end - buffer;
-}
-
-int read_line(){
-    int status = read(STDIN_FILENO, buffer, MAX_LINE_LENGTH);
-    if(status < 0){
-	if(errno == EINTR)
-	    return read_line();
-	return status;
-    }
-    linepos = buffer;
-    buf_end = buffer + status;
-    return status;
-}
-
-/*
- * Copy characters from given range to buf2_end and move buf2_end after copied
- * characters. If given characters won't fit into snd_buffer, set buf2_end to
- * snd_buffer.
- */
-
-inline void copy_to_snd_buf(const char *from, char *to){
-    if((to-from) + (buf2_end - snd_buffer) > MAX_LINE_LENGTH)
-        buf2_end = snd_buffer;
-    else {
-        memcpy(buf2_end, from, sizeof(char)*(to-from));
-        buf2_end += (to-from);
-    }
-}
-
 /* 
  * Return 0-terminated string containing next line for parse. If the line is too
  * long or read errors occured, return NULL.
  */
 
-char * next_line(){
-    int l = read_line_if_neccesary();
+char *
+next_line()
+{
+    int l = read_line_if_neccesary(&prim_buf);
     if(l < 0)
         return NULL;
     if(l == 0){
-        *buffer = '\0';
-        return buffer;
+        *(prim_buf.line) = '\0';
+        return prim_buf.line;
     }
 
-    char *ret = find_line_end(linepos, buf_end);
+    char *ret = find_line_end(&prim_buf);
 
-    // command ended
-
-    if(ret != buf_end || buf_end == buffer){
+    if(ret != prim_buf.end){
         *ret = '\0';
-        char *x = linepos;
-        linepos = ret+1;
+        char *x = prim_buf.pos;
+        prim_buf.pos = ret+1;
         return x;
     }
 
-    // command didn't end
-
-    buf2_end = snd_buffer;
-    copy_to_snd_buf(linepos, ret);
+    snd_buf.end = snd_buf.line;
+    append_to_line(&snd_buf, prim_buf.pos, ret - prim_buf.pos);
     while(1) {
-        if(read_line() < 0)
+        if(read_line(&prim_buf) < 0)
             return NULL;
-        ret = find_line_end(linepos, buf_end);
-        copy_to_snd_buf(linepos, ret);
-        if(buf2_end == snd_buffer){
-            linepos = (ret == buf_end ? NULL : ret+1);
-	    while(linepos == NULL) {
-		if(read_line() < 0)
-		    break;
-		ret = find_line_end(linepos, buf_end);
-		if(ret != buf_end)
-		    linepos = ret+1;
-		else
-		    linepos = NULL;
-	    }
+        ret = find_line_end(&prim_buf);
+	append_to_line(&snd_buf, prim_buf.pos, ret-prim_buf.pos);
+        if(snd_buf.end == snd_buf.line){
+	    skip_to_end(&prim_buf);
             return NULL;
         }
-        if(ret != buf_end){
-            *buf2_end = '\0';
-            linepos = ret+1;
-            return snd_buffer;
+        if(ret != prim_buf.end){
+            *(snd_buf.end) = '\0';
+	    prim_buf.pos = ret+1;
+            return snd_buf.line;
         }
     }
     return NULL;

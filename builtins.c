@@ -16,11 +16,11 @@ int lkill(char *[]);
 int lcd(char *[]);
 
 builtin_pair builtins_table[]={
-    {"exit",	&lexit},
-    {"lecho",	&echo},
-    {"lcd",		&lcd},
-    {"lkill",	&lkill},
-    {"lls",		&lls},
+    {"exit",    &lexit},
+    {"lecho",   &echo},
+    {"lcd",     &lcd},
+    {"lkill",   &lkill},
+    {"lls",     &lls},
     {NULL,NULL}
 };
 
