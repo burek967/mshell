@@ -21,6 +21,7 @@ main(int argc, char *argv[])
     builtin_pair builtin;
     struct stat fd_status;
     char *nline;
+    pipeline *pipe;
 
     prim_buf.end = prim_buf.line;
     snd_buf.end = snd_buf.line;
@@ -49,12 +50,21 @@ main(int argc, char *argv[])
         // Parse
         line *l = parseline(nline);
         command *c = pickfirstcommand(l);
+	    #ifdef DEBUG
+	    printparsedline(l);
+	    #endif
         if(c == NULL) {
             WRITES(STDERR_FILENO, SYNTAX_ERROR_STR);
             WRITES(STDERR_FILENO, "\n");
         }
 
         // Run
+
+	    for(pipe = l->pipelines; *pipe; ++pipe){
+	    	if(runpipeline(*pipe) == -1)
+	    	    exit(EXEC_FAILURE);
+	    }
+
         get_builtin(&builtin, *(c->argv));
         if(builtin.fun != NULL){
             if(builtin.fun(c->argv) != 0){

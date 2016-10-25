@@ -1,6 +1,8 @@
 #ifndef _MYUTILS_H_
 #define _MYUTILS_H_
 
+#include <fcntl.h>
+
 #include "config.h"
 #include "builtins.h"
 
@@ -18,6 +20,8 @@ void get_builtin(builtin_pair *, const char *);
 int read_line(struct line_buffer *);
 int skip_to_end(struct line_buffer *);
 char * next_line(struct line_buffer *, struct line_buffer *);
+int open_as(char *, int, int);
+int run_pipeline(pipeline);
 
 static inline void
 append_to_line(struct line_buffer *dst, const char *from, size_t n)
@@ -47,4 +51,4 @@ read_line_if_neccesary(struct line_buffer *buffer)
     return buffer->end - buffer->line;
 }
 
-#endif // _MYUTILS_H_
+#endif /* !_MYUTILS_H_ */

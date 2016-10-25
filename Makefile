@@ -20,5 +20,5 @@ siparse.a:
 clean:
 	rm -f mshell *.o
 
-debug: CFLAGS+= -g
+debug: CFLAGS+= -g -DDEBUG
 debug: mshell
