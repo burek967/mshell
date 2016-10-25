@@ -5,6 +5,7 @@
 #include "builtins.h"
 
 #define WRITES(fd,x) write(fd, x, sizeof(x)-sizeof(char))
+#define WRITESTR(fd,x) write(fd, x, strlen(x))
 #define BUF_EMPTY(buf) ((buf)->end == (buf)->line)
 
 struct line_buffer {
@@ -16,6 +17,7 @@ struct line_buffer {
 void get_builtin(builtin_pair *, const char *);
 int read_line(struct line_buffer *);
 int skip_to_end(struct line_buffer *);
+char * next_line(struct line_buffer *, struct line_buffer *);
 
 static inline void
 append_to_line(struct line_buffer *dst, const char *from, size_t n)

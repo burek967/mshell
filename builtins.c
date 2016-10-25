@@ -61,7 +61,7 @@ lls(char * argv[])
     while((en = readdir(dir)) != NULL){
 	if(*(en->d_name) == '.')
 	    continue;
-	write(STDOUT_FILENO, en->d_name, strlen(en->d_name));
+	WRITESTR(STDOUT_FILENO, en->d_name);
 	WRITES(STDOUT_FILENO, "\n");
     }
     closedir(dir);

@@ -64,3 +64,43 @@ skip_to_end(struct line_buffer *buffer)
     } while(1);
     return 0;
 }
+
+char *
+next_line(struct line_buffer *buf1, struct line_buffer *buf2)
+{
+    int l = read_line_if_neccesary(buf1);
+    if(l < 0)
+        return NULL;
+    if(l == 0){
+        *(buf1->line) = '\0';
+        return buf1->line;
+    }
+    
+    char *ret = find_line_end(buf1);
+    
+    if(ret != buf1->end){
+        *ret = '\0';
+        char *x = buf1->pos;
+        buf1->pos = ret+1;
+        return x;
+    }
+    
+    buf2->end = buf2->line;
+    append_to_line(buf2, buf1->pos, ret - buf1->pos);
+    while(1) {
+        if(read_line(buf1) < 0)
+            return NULL;
+        ret = find_line_end(buf1);
+	append_to_line(buf2, buf1->pos, ret-buf1->pos);
+        if(BUF_EMPTY(buf2)){
+	    skip_to_end(buf1);
+            return NULL;
+        }
+        if(ret != buf1->end){
+            *(buf2->end) = '\0';
+	    buf1->pos = ret+1;
+            return buf2->line;
+        }
+    }
+    return NULL;
+}

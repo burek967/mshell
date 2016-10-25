@@ -14,15 +14,13 @@
 
 static struct line_buffer prim_buf, snd_buf;
 
-static char *next_line();
-
 int
 main(int argc, char *argv[])
 {
     int print_prompt;
     builtin_pair builtin;
     struct stat fd_status;
-    char* nline;
+    char *nline;
 
     prim_buf.end = prim_buf.line;
     snd_buf.end = snd_buf.line;
@@ -39,13 +37,13 @@ main(int argc, char *argv[])
             WRITES(STDOUT_FILENO, PROMPT_STR);
 
         // Read line
-        nline = next_line();
+        nline = next_line(&prim_buf, &snd_buf);
         if(nline == NULL) {
             WRITES(STDERR_FILENO, SYNTAX_ERROR_STR);
             WRITES(STDERR_FILENO, "\n");
             continue;
         }	
-        if(prim_buf.end == prim_buf.line)
+        if(BUF_EMPTY(&prim_buf))
             break;
 
         // Parse
@@ -61,7 +59,7 @@ main(int argc, char *argv[])
         if(builtin.fun != NULL){
             if(builtin.fun(c->argv) != 0){
                 WRITES(STDERR_FILENO, "Builtin ");
-                write(STDERR_FILENO, builtin.name, strlen(builtin.name));
+                WRITESTR(STDERR_FILENO, builtin.name);
                 WRITES(STDERR_FILENO, " error.\n");
             }
             continue;
@@ -74,7 +72,7 @@ main(int argc, char *argv[])
             wait(NULL);
         else {
             execvp(*(c->argv), c->argv);
-            write(STDERR_FILENO, *(c->argv), strlen(*(c->argv)));
+            WRITESTR(STDERR_FILENO, *(c->argv));
             switch(errno) {
                 case EACCES:
                     WRITES(STDERR_FILENO, ": permission denied\n");
@@ -90,49 +88,4 @@ main(int argc, char *argv[])
         }
     }
     return 0;
-}
-
-/* 
- * Return 0-terminated string containing next line for parse. If the line is too
- * long or read errors occured, return NULL.
- */
-
-char *
-next_line()
-{
-    int l = read_line_if_neccesary(&prim_buf);
-    if(l < 0)
-        return NULL;
-    if(l == 0){
-        *(prim_buf.line) = '\0';
-        return prim_buf.line;
-    }
-
-    char *ret = find_line_end(&prim_buf);
-
-    if(ret != prim_buf.end){
-        *ret = '\0';
-        char *x = prim_buf.pos;
-        prim_buf.pos = ret+1;
-        return x;
-    }
-
-    snd_buf.end = snd_buf.line;
-    append_to_line(&snd_buf, prim_buf.pos, ret - prim_buf.pos);
-    while(1) {
-        if(read_line(&prim_buf) < 0)
-            return NULL;
-        ret = find_line_end(&prim_buf);
-	append_to_line(&snd_buf, prim_buf.pos, ret-prim_buf.pos);
-        if(snd_buf.end == snd_buf.line){
-	    skip_to_end(&prim_buf);
-            return NULL;
-        }
-        if(ret != prim_buf.end){
-            *(snd_buf.end) = '\0';
-	    prim_buf.pos = ret+1;
-            return snd_buf.line;
-        }
-    }
-    return NULL;
 }
