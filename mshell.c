@@ -12,8 +12,6 @@
 #include "utils.h"
 #include "builtins.h"
 
-static struct line_buffer prim_buf, snd_buf;
-
 int
 main(int argc, char *argv[])
 {
@@ -22,50 +20,33 @@ main(int argc, char *argv[])
     char *nline;
     pipeline *pipe;
 
-    prim_buf.end = prim_buf.line;
-    snd_buf.end = snd_buf.line;
-    prim_buf.pos = snd_buf.pos = NULL;
-
     if(fstat(STDOUT_FILENO, &fd_status) == -1)
         exit(2);
 
     print_prompt = S_ISCHR(fd_status.st_mode);
 
     while(1) {
-        // Print prompt
         if(print_prompt)
             WRITES(STDOUT_FILENO, PROMPT_STR);
 
-        // Read line
-        nline = next_line(&prim_buf, &snd_buf);
+        nline = next_line();
         if(nline == NULL) {
             WRITES(STDERR_FILENO, SYNTAX_ERROR_STR);
             WRITES(STDERR_FILENO, "\n");
             continue;
         }	
-        if(BUF_EMPTY(&prim_buf))
+        if(end_of_input())
             break;
 
-        // Parse
         line *l = parseline(nline);
-        command *c = pickfirstcommand(l);
-        if(c == NULL) {
+        if(l == NULL) {
             WRITES(STDERR_FILENO, SYNTAX_ERROR_STR);
             WRITES(STDERR_FILENO, "\n");
+	    //continue;
         }
-#ifdef DEBUG
-	//printparsedline(l);
-#endif
 
-        // Run
-
-	for(pipe = l->pipelines; *pipe != NULL; ++pipe){
-#ifdef DEBUG
-	    puts("Running pipeline");
-#endif
-	    if(run_pipeline(*pipe) == -1)
-		continue;
-	}
+	for(pipe = l->pipelines; *pipe != NULL; ++pipe)
+	    run_pipeline(*pipe);
     }
     return 0;
 }
