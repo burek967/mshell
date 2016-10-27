@@ -42,7 +42,7 @@ main(int argc, char *argv[])
         if(l == NULL) {
             WRITES(STDERR_FILENO, SYNTAX_ERROR_STR);
             WRITES(STDERR_FILENO, "\n");
-	    //continue;
+	    continue;
         }
 
 	for(pipe = l->pipelines; *pipe != NULL; ++pipe)

@@ -1,4 +1,4 @@
-#include "builtins.h"
+#include "myutils.h"
 
 #include <string.h>
 #include <unistd.h>
@@ -7,8 +7,12 @@
 #include <stdio.h>
 #include <sys/wait.h>
 #include <sys/types.h>
+#include <sys/stat.h>
+#include <fcntl.h>
 
-#include "myutils.h"
+#include "config.h"
+#include "builtins.h"
+#include "siparse.h"
 
 // Default mode for newly created files
 static const mode_t def_mode = S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH;
@@ -16,7 +20,7 @@ static const mode_t def_mode = S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH;
 // Buffers used for handling input
 static struct line_buffer prim_buf, snd_buf;
 
-static int read_line(struct line_buffer *);
+static ssize_t read_line(struct line_buffer *);
 static int skip_to_end(struct line_buffer *);
 
 static void get_builtin(builtin_pair *, const char *);
@@ -47,7 +51,7 @@ find_line_end(struct line_buffer *buffer)
     return ret;
 }
 
-static inline int
+static inline ssize_t
 read_line_if_neccesary(struct line_buffer *buffer)
 {
     if(buffer->pos == NULL || buffer->pos == buffer->end)
@@ -55,10 +59,10 @@ read_line_if_neccesary(struct line_buffer *buffer)
     return buffer->end - buffer->line;
 }
 
-static int
+static ssize_t
 read_line(struct line_buffer *buffer)
 {
-    int status = read(STDIN_FILENO, buffer->line, MAX_LINE_LENGTH);
+    ssize_t status = read(STDIN_FILENO, buffer->line, MAX_LINE_LENGTH);
     if(status < 0){
 	if(errno == EINTR)
 	    return read_line(buffer);
@@ -97,11 +101,11 @@ skip_to_end(struct line_buffer *buffer)
 char *
 next_line()
 {
-    int l = read_line_if_neccesary(&prim_buf);
+    ssize_t l = read_line_if_neccesary(&prim_buf);
     if(l < 0)
         return NULL;
     if(l == 0){
-        *(prim_buf.line) = '\0';
+        prim_buf.line[0] = '\0';
         return prim_buf.line;
     }
     
@@ -143,6 +147,8 @@ end_of_input()
 static void
 get_builtin(builtin_pair *pair, const char *cmd)
 {
+    if(pair == NULL)
+	return;
     if(cmd == NULL){
 	pair->name = NULL;
 	pair->fun = NULL;
@@ -166,7 +172,7 @@ run_command_bg(command *c, int fd_in, int fd[2])
 #ifdef DEBUG
     printf("Command %s, IN=%d, OUT=%d\n", *(c->argv), fd_in, fd[1]);
 #endif
-    int k;
+    pid_t k;
     if((k = fork()) == -1){
 #ifdef DEBUG
 	puts("Fork failed, cleaning up.");
@@ -202,13 +208,11 @@ run_command_bg(command *c, int fd_in, int fd[2])
             break;
         }
         exit(EXEC_FAILURE);
-    } else {
-	if(fd_in != STDIN_FILENO){
+    } else { 
+	if(fd_in != STDIN_FILENO)
 	    close(fd_in);
-	}
-	if(fd[1] != STDOUT_FILENO){
+	if(fd[1] != STDOUT_FILENO)
 	    close(fd[1]);
-	}
     }
     return 0;
 }
@@ -238,6 +242,8 @@ run_single_command(command *c)
 static int
 check_pipeline(pipeline p)
 {
+    if(p == NULL)
+	return -1;
     if(*p == NULL || *(p+1) == NULL)
 	return 0;
     command **c;
@@ -317,7 +323,8 @@ run_pipeline(pipeline p)
 	return -1;
     }
     command **c;
-    int in_fd = STDIN_FILENO, proc_cnt = 0;
+    int in_fd = STDIN_FILENO;
+    int proc_cnt = 0;
     int fd[2];
     if(*(p+1) == NULL && run_single_command(*p) != -1)
 	return 0;
