@@ -6,9 +6,11 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <sys/wait.h>
-
+#include <sys/types.h>
 
 #include "myutils.h"
+
+static const mode_t def_mode = S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH;
 
 int run_command_bg(command *, int, int[2]);
 
@@ -114,29 +116,30 @@ next_line(struct line_buffer *buf1, struct line_buffer *buf2)
 int
 open_as(char *file, int flags, int fd)
 {
-    if(close(fd) == -1){
-        // errors
-        return -1;
-    }
-    int fil;
-    if((fil = open(file, flags)) == -1){
+    int fil = open(file, flags, def_mode);
+    if(fil == -1){
+        WRITESTR(STDERR_FILENO, file);
 	switch(errno){
         case EACCES:
-            WRITESTR(STDERR_FILENO, file);
             WRITES(STDERR_FILENO, ": permission denied\n");
             break;
         case ENOENT:
-            WRITESTR(STDERR_FILENO, file);
             WRITES(STDERR_FILENO, ": no such file or directory\n");
+	    break;
         }
         return -1;
     }
-    if(fil != fd){
-        // fcntl?
-        return -1;
+    if(dup2(fil, fd) == -1){
+	close(fil);
+	return -1;
     }
+    close(fil);
     return 0;
 }
+
+/*
+ * This should be called from the child process.
+ */
 
 int
 get_redirections(redirection **redirs)
@@ -149,33 +152,43 @@ get_redirections(redirection **redirs)
 	if(IS_RIN((*redir)->flags)) {
 	    flags = O_RDONLY;
 	    fd = STDIN_FILENO;
-	} else if(IS_ROUT((*redir)->flags)){
-	    flags = O_WRONLY | O_CREAT | O_TRUNC;
-	    fd = STDOUT_FILENO;
 	} else if(IS_RAPPEND((*redir)->flags)){
 	    flags = O_WRONLY | O_CREAT | O_APPEND;
 	    fd = STDOUT_FILENO;
+	} else if(IS_ROUT((*redir)->flags)){
+	    flags = O_WRONLY | O_CREAT | O_TRUNC;
+	    fd = STDOUT_FILENO;
 	} else
 	    return -1;
-	if(open_as((*redir)->filename, flags, fd) == -1){
-	    WRITESTR(STDERR_FILENO, (*redir)->filename);
-	    switch(errno){
-	    case ENOENT:
-		WRITES(STDERR_FILENO, ": no such file or directory\n");
-		break;
-	    case EACCES:
-		WRITES(STDERR_FILENO, ": permission denied\n");
-		break;
-	    }
+	if(open_as((*redir)->filename, flags, fd) == -1)
 	    return -1;
-	}
     }
+    return 0;
+}
+
+/*
+ * Check if given pipeline has an empty command.
+ */
+
+int
+check_pipeline(pipeline p)
+{
+    if(*p == NULL || *(p+1) == NULL)
+	return 0;
+    command **c;
+    for(c = p; *c != NULL; ++c)
+	if((*c)->argv[0] == NULL)
+	    return -1;
     return 0;
 }
 
 int
 run_pipeline(pipeline p)
 {
+    if(check_pipeline(p) == -1){
+	WRITES(STDERR_FILENO, "Syntax error.\n");
+	return -1;
+    }
     command **c;
     int in_fd = STDIN_FILENO, proc_cnt = 0;
     int fd[2];
@@ -199,11 +212,12 @@ run_pipeline(pipeline p)
     }
     for(c = p; *c != NULL; ++c){
 	++proc_cnt;
-        if((*c)->argv[0] == NULL)
-            return -1;
         if(*(c+1) != NULL){
             if(pipe(fd) == -1)
                 return -1;
+#ifdef DEBUG
+	    printf("Pipe: WR=>(%d|%d)=>R\n",fd[1],fd[0]);
+#endif
         } else {
 	    fd[1] = STDOUT_FILENO;
 	    fd[0] = STDIN_FILENO;
@@ -212,8 +226,9 @@ run_pipeline(pipeline p)
 	    return -1;
 	in_fd = fd[0];
     }
-    if(in_fd != STDIN_FILENO)
+    if(in_fd != STDIN_FILENO){
 	close(in_fd);
+    }
     while(proc_cnt--)
 	wait(NULL);
     return 0;
@@ -227,6 +242,9 @@ run_command_bg(command *c, int fd_in, int fd[2])
 #endif
     int k;
     if((k = fork()) == -1){
+#ifdef DEBUG
+	puts("Fork failed, cleaning up.");
+#endif
 	if(fd[0] != STDIN_FILENO)
 	    close(fd[0]);
 	if(fd[1] != STDOUT_FILENO)
@@ -236,16 +254,20 @@ run_command_bg(command *c, int fd_in, int fd[2])
 	return -1;
     }
     if(k == 0){
-        close(fd[0]);
-        if(dup2(fd_in, STDIN_FILENO) == -1){
+	if(fd[0] != STDIN_FILENO)
+	    close(fd[0]);
+        if(fd_in != STDIN_FILENO && dup2(fd_in, STDIN_FILENO) == -1){
 	    printf("IN: %s, %d %d\n", strerror(errno), fd_in, STDIN_FILENO);
 	    exit(EXEC_FAILURE);
 	}
-	if(dup2(fd[1], STDOUT_FILENO) == -1){
+	if(fd[1] != STDOUT_FILENO && dup2(fd[1], STDOUT_FILENO) == -1){
 	    printf("OUT: %s, %d %d\n", strerror(errno), fd[1], STDOUT_FILENO);
 	    exit(EXEC_FAILURE);
 	}
-	WRITES(STDOUT_FILENO, "TESTING STDOUT!!!!!!");
+	if(fd_in != STDIN_FILENO)
+	    close(fd_in);
+	if(fd[1] != STDOUT_FILENO)
+	    close(fd[1]);
 	if(get_redirections(c->redirs) == -1)
 	    exit(EXEC_FAILURE);
         execvp(*(c->argv), c->argv);
@@ -263,10 +285,12 @@ run_command_bg(command *c, int fd_in, int fd[2])
         }
         exit(EXEC_FAILURE);
     } else {
-	if(fd_in != STDIN_FILENO)
+	if(fd_in != STDIN_FILENO){
 	    close(fd_in);
-	if(fd[1] != STDOUT_FILENO)
+	}
+	if(fd[1] != STDOUT_FILENO){
 	    close(fd[1]);
+	}
     }
     return 0;
 }
