@@ -114,6 +114,20 @@ next_line(struct line_buffer *buf1, struct line_buffer *buf2)
 }
 
 int
+mv_fd(int fildes, int fildes2)
+{
+    if(fildes == fildes2)
+	return fildes2;
+    if(dup2(fildes,fildes2) == -1)
+	return -1;
+    if(close(fildes) == -1){
+	close(fildes2);
+	return -1;
+    }
+    return 0;
+}
+
+int
 open_as(char *file, int flags, int fd)
 {
     int fil = open(file, flags, def_mode);
@@ -129,11 +143,8 @@ open_as(char *file, int flags, int fd)
         }
         return -1;
     }
-    if(dup2(fil, fd) == -1){
-	close(fil);
+    if(mv_fd(fil, fd) == -1)
 	return -1;
-    }
-    close(fil);
     return 0;
 }
 
@@ -183,6 +194,28 @@ check_pipeline(pipeline p)
 }
 
 int
+run_cmd(command *c)
+{
+#ifdef DEBUG
+    printf("Single command: '%s'\n", *((*p)->argv));
+#endif
+    builtin_pair builtin;
+    get_builtin(&builtin, *(c->argv));
+    if(builtin.fun != NULL){
+#ifdef DEBUG
+	printf("Running builtin %s\n", builtin.name);
+#endif
+	if(builtin.fun(c->argv) != 0){
+	    WRITES(STDERR_FILENO, "Builtin ");
+	    WRITESTR(STDERR_FILENO, builtin.name);
+	    WRITES(STDERR_FILENO, " error.\n");
+	}
+	return 0;
+    }
+    return -1;
+}
+
+int
 run_pipeline(pipeline p)
 {
     if(check_pipeline(p) == -1){
@@ -192,24 +225,8 @@ run_pipeline(pipeline p)
     command **c;
     int in_fd = STDIN_FILENO, proc_cnt = 0;
     int fd[2];
-    if(*(p+1) == NULL){
-#ifdef DEBUG
-	printf("Single command: '%s'\n", *((*p)->argv));
-#endif
-	builtin_pair builtin;
-	get_builtin(&builtin, *((*p)->argv));
-	if(builtin.fun != NULL){
-#ifdef DEBUG
-	    printf("Running builtin %s\n", builtin.name);
-#endif
-	    if(builtin.fun((*p)->argv) != 0){
-		WRITES(STDERR_FILENO, "Builtin ");
-		WRITESTR(STDERR_FILENO, builtin.name);
-		WRITES(STDERR_FILENO, " error.\n");
-	    }
-	    return 0;
-	}
-    }
+    if(*(p+1) == NULL && run_cmd(*p) != -1)
+	return 0;
     for(c = p; *c != NULL; ++c){
 	++proc_cnt;
         if(*(c+1) != NULL){
@@ -226,9 +243,8 @@ run_pipeline(pipeline p)
 	    return -1;
 	in_fd = fd[0];
     }
-    if(in_fd != STDIN_FILENO){
+    if(in_fd != STDIN_FILENO)
 	close(in_fd);
-    }
     while(proc_cnt--)
 	wait(NULL);
     return 0;
@@ -256,18 +272,10 @@ run_command_bg(command *c, int fd_in, int fd[2])
     if(k == 0){
 	if(fd[0] != STDIN_FILENO)
 	    close(fd[0]);
-        if(fd_in != STDIN_FILENO && dup2(fd_in, STDIN_FILENO) == -1){
-	    printf("IN: %s, %d %d\n", strerror(errno), fd_in, STDIN_FILENO);
+        if(mv_fd(fd_in, STDIN_FILENO) == -1)
 	    exit(EXEC_FAILURE);
-	}
-	if(fd[1] != STDOUT_FILENO && dup2(fd[1], STDOUT_FILENO) == -1){
-	    printf("OUT: %s, %d %d\n", strerror(errno), fd[1], STDOUT_FILENO);
+	if(mv_fd(fd[1], STDOUT_FILENO) == -1)
 	    exit(EXEC_FAILURE);
-	}
-	if(fd_in != STDIN_FILENO)
-	    close(fd_in);
-	if(fd[1] != STDOUT_FILENO)
-	    close(fd[1]);
 	if(get_redirections(c->redirs) == -1)
 	    exit(EXEC_FAILURE);
         execvp(*(c->argv), c->argv);
