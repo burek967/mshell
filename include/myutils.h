@@ -5,6 +5,7 @@
 
 #include "config.h"
 #include "builtins.h"
+#include "siparse.h"
 
 #define WRITES(fd,x) write(fd, x, sizeof(x)-sizeof(char))
 #define WRITESTR(fd,x) write(fd, x, strlen(x))

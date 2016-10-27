@@ -18,7 +18,6 @@ int
 main(int argc, char *argv[])
 {
     int print_prompt;
-    builtin_pair builtin;
     struct stat fd_status;
     char *nline;
     pipeline *pipe;
@@ -50,52 +49,23 @@ main(int argc, char *argv[])
         // Parse
         line *l = parseline(nline);
         command *c = pickfirstcommand(l);
-	    #ifdef DEBUG
-	    printparsedline(l);
-	    #endif
         if(c == NULL) {
             WRITES(STDERR_FILENO, SYNTAX_ERROR_STR);
             WRITES(STDERR_FILENO, "\n");
         }
+#ifdef DEBUG
+	//printparsedline(l);
+#endif
 
         // Run
 
-	    for(pipe = l->pipelines; *pipe; ++pipe){
-	    	if(runpipeline(*pipe) == -1)
-	    	    exit(EXEC_FAILURE);
-	    }
-
-        get_builtin(&builtin, *(c->argv));
-        if(builtin.fun != NULL){
-            if(builtin.fun(c->argv) != 0){
-                WRITES(STDERR_FILENO, "Builtin ");
-                WRITESTR(STDERR_FILENO, builtin.name);
-                WRITES(STDERR_FILENO, " error.\n");
-            }
-            continue;
-        }
-
-        int k = fork();
-        if(k < 0)
-            exit(2);
-        if(k)
-            wait(NULL);
-        else {
-            execvp(*(c->argv), c->argv);
-            WRITESTR(STDERR_FILENO, *(c->argv));
-            switch(errno) {
-                case EACCES:
-                    WRITES(STDERR_FILENO, ": permission denied\n");
-                    break;
-                case ENOENT:
-                    WRITES(STDERR_FILENO, ": no such file or directory\n");
-                    break;
-                default:
-                    WRITES(STDERR_FILENO, ": exec error\n");
-                    break;
-            }
-            exit(EXEC_FAILURE);
-        }
+	for(pipe = l->pipelines; *pipe != NULL; ++pipe){
+#ifdef DEBUG
+	    puts("Running pipeline");
+#endif
+	    if(run_pipeline(*pipe) == -1)
+		continue;
+	}
     }
     return 0;
 }

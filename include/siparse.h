@@ -25,7 +25,7 @@ typedef struct command {
 } command;  
 
 /* NULL ended array of pointers to commands */
-typedef commannd** pipelie;
+typedef command** pipeline;
 
 /* NULL ended array of pipelines */
 typedef pipeline* pipelineseq;
