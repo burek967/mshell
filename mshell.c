@@ -5,6 +5,7 @@
 #include <sys/stat.h>
 #include <errno.h>
 #include <stdio.h>
+#include <signal.h>
 
 #include "myutils.h"
 #include "config.h"
@@ -17,6 +18,7 @@ main(int argc, char *argv[])
 {
     int print_prompt;
     struct stat fd_status;
+    struct sigaction act;
     char *nline;
     pipeline *pipe;
 
@@ -25,19 +27,25 @@ main(int argc, char *argv[])
 
     print_prompt = S_ISCHR(fd_status.st_mode);
 
+    act.sa_handler = sigchild_handler;
+    sigemptyset(&act.sa_mask);
+    sigaction(SIGCHLD, &act, NULL);
+
     while(1) {
-        if(print_prompt)
+        if(print_prompt){
+            print_bg_cmds();
             WRITES(STDOUT_FILENO, PROMPT_STR);
+        }
 
         nline = next_line();
         if(nline == NULL) {
             WRITES(STDERR_FILENO, SYNTAX_ERROR_STR);
             WRITES(STDERR_FILENO, "\n");
             continue;
-        }	
+        }   
         if(end_of_input())
             break;
-
+        
         line *l = parseline(nline);
         if(l == NULL) {
             WRITES(STDERR_FILENO, SYNTAX_ERROR_STR);
@@ -47,7 +55,7 @@ main(int argc, char *argv[])
         if(l->pipelines == NULL)
             continue;
         for(pipe = l->pipelines; *pipe != NULL; ++pipe)
-            run_pipeline(*pipe);
+            run_pipeline(*pipe, (l->flags == LINBACKGROUND));
     }
     return 0;
 }

@@ -20,6 +20,8 @@ static const mode_t def_mode = S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH;
 // Buffers used for handling input
 static struct line_buffer prim_buf, snd_buf;
 
+static int bg_process_count;
+
 static ssize_t read_line(struct line_buffer *);
 static int skip_to_end(struct line_buffer *);
 
@@ -30,6 +32,74 @@ static int check_pipeline(pipeline);
 static int get_redirections(redirection **);
 static int open_as(const char *, int, int);
 static int move_fd(int, int);
+static int fg_remove(pid_t);
+static void bg_add(pid_t, int);
+
+static struct {
+    pid_t T[MAX_LINE_LENGTH];
+    pid_t *end;
+} fg_processes;
+
+struct process_info {
+    int status;
+    pid_t pid;
+};
+
+static struct {
+    struct process_info T[MAX_LINE_LENGTH];
+    struct process_info *end;
+} bg_process_info;
+
+void
+sigchild_handler(int sig)
+{
+    pid_t child;
+    do {
+        child = waitpid(-1,NULL,WNOHANG);
+        if(child > 0){
+            if(!fg_remove(child))
+        }
+    } while(child > 0);
+}
+
+static int
+fg_remove(pid_t pid)
+{
+    if(fg_processes.end == NULL || fg_processes.end == fg_processes.T)
+        return 0;
+    pid_t *cur;
+    for(cur = fg_processes.T; cur != fg_processes.end; ++cur)
+        if(*cur == pid)
+            break;
+    if(cur != fg_processes.end){
+        *cur = *(--fg_processes.end);
+        return 1;
+    }
+    return 0;
+}
+
+static void
+bg_add(pid_t pid, int status)
+{
+    if(bg_process_info.end == NULL)
+        bg_process_info.end = bg_process_info.T;
+    bg_process_info.end->pid = pid;
+    bg_process_info.end->status = status;
+    ++bg_process_info.end;
+}
+
+void
+print_bg_cmds()
+{
+    if(bg_process_info.end == NULL)
+        return;
+    struct process_info *i;
+    for(i = bg_process_info.T; i != bg_process_info.end; ++i)
+        printf("Background process %d terminated. (exited with status %d)\n",
+                i->pid,
+                i->status);
+    bg_process_info.end = bg_process_info.T;
+}
 
 static inline void
 append_to_line(struct line_buffer *dst, const char *from, size_t n)
@@ -317,7 +387,7 @@ move_fd(int fildes, int fildes2)
 }
 
 int
-run_pipeline(pipeline p)
+run_pipeline(pipeline p, int bg)
 {
     if(check_pipeline(p) == -1){
         WRITES(STDERR_FILENO, SYNTAX_ERROR_STR);
