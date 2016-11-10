@@ -32,9 +32,11 @@ main(int argc, char *argv[])
     sigemptyset(&act.sa_mask);
     sigaction(SIGCHLD, &act, NULL);
 
-    sigemptyset(&mask);
-    sigaddset(&mask, SIGINT);
-    sigprocmask(SIG_BLOCK, &mask, NULL);
+    act.sa_handler = SIG_IGN;
+    sigemptyset(&act.sa_mask);
+    sigaction(SIGINT, &act, NULL);
+    //sigaddset(&mask, SIGINT);
+    //sigprocmask(SIG_BLOCK, &mask, NULL);
 
     while(1) {
         if(print_prompt){

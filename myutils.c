@@ -9,6 +9,7 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <fcntl.h>
+#include <signal.h>
 
 #include "config.h"
 #include "builtins.h"
@@ -287,16 +288,19 @@ run_command(command *c, int fd_in, int fd[2], int bg)
 	    fg_add(getpid());
 	} else {
 	    setsid();
-	    struct sigaction act;
+	    printf("Parent: %d, child: %d\n", getsid(getppid()), getsid(0));
+	    /*struct sigaction act;
 	    sigemptyset(&act.sa_mask);
 	    act.sa_handler = SIG_DFL;
-	    sigaction(SIGINT, &act, NULL);
+	    sigaction(SIGINT, &act, NULL);*/
 	    bg_process_count++;
 	}
-	sigset_t mask;
-	sigemptyset(&mask);
-	sigaddset(&mask, SIGINT);
-	sigprocmask(SIG_UNBLOCK, &mask, NULL);
+	struct sigaction act;
+	sigemptyset(&act.sa_mask);
+	act.sa_handler = SIG_DFL;
+	sigaction(SIGINT, &act, NULL);
+	//sigaddset(&mask, SIGINT);
+	//sigprocmask(SIG_UNBLOCK, &mask, NULL);
 
 	if(fd[0] != STDIN_FILENO)
             close(fd[0]);
