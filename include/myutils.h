@@ -10,6 +10,8 @@
 #define WRITES(fd,x) write(fd, x, sizeof(x)-sizeof(char))
 #define WRITESTR(fd,x) write(fd, x, strlen(x))
 
+#define MAX_BACKGROUND_PS 512
+
 /*
  * Input buffer representation
  */

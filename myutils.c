@@ -26,13 +26,15 @@ static ssize_t read_line(struct line_buffer *);
 static int skip_to_end(struct line_buffer *);
 
 static void get_builtin(builtin_pair *, const char *);
-static int run_command_bg(command *, int, int[2]);
+static int run_command(command *, int, int[2], int);
 static int run_single_command(command *);
 static int check_pipeline(pipeline);
 static int get_redirections(redirection **);
 static int open_as(const char *, int, int);
 static int move_fd(int, int);
+static inline int fg_empty();
 static int fg_remove(pid_t);
+static void fg_add(pid_t);
 static void bg_add(pid_t, int);
 
 static struct {
@@ -46,18 +48,27 @@ struct process_info {
 };
 
 static struct {
-    struct process_info T[MAX_LINE_LENGTH];
+    struct process_info T[MAX_BACKGROUND_PS];
     struct process_info *end;
 } bg_process_info;
+
+static inline int
+fg_empty()
+{
+    return fg_processes.end == NULL || fg_processes.end == fg_processes.T;
+}
 
 void
 sigchild_handler(int sig)
 {
     pid_t child;
+    int stat;
     do {
-        child = waitpid(-1,NULL,WNOHANG);
+        child = waitpid(-1,&stat,WNOHANG);
         if(child > 0){
-            if(!fg_remove(child))
+            if(!fg_remove(child)){
+		bg_add(child, stat);
+	    }
         }
     } while(child > 0);
 }
@@ -65,7 +76,7 @@ sigchild_handler(int sig)
 static int
 fg_remove(pid_t pid)
 {
-    if(fg_processes.end == NULL || fg_processes.end == fg_processes.T)
+    if(fg_empty())
         return 0;
     pid_t *cur;
     for(cur = fg_processes.T; cur != fg_processes.end; ++cur)
@@ -79,10 +90,20 @@ fg_remove(pid_t pid)
 }
 
 static void
+fg_add(pid_t pid)
+{
+    if(fg_processes.end == NULL)
+	fg_processes.end =fg_processes.T;
+    *(fg_processes.end++) = pid;
+}
+
+static void
 bg_add(pid_t pid, int status)
 {
     if(bg_process_info.end == NULL)
         bg_process_info.end = bg_process_info.T;
+    if(bg_process_info.end -  bg_process_info.T == MAX_BACKGROUND_PS)
+	return;
     bg_process_info.end->pid = pid;
     bg_process_info.end->status = status;
     ++bg_process_info.end;
@@ -94,10 +115,16 @@ print_bg_cmds()
     if(bg_process_info.end == NULL)
         return;
     struct process_info *i;
-    for(i = bg_process_info.T; i != bg_process_info.end; ++i)
-        printf("Background process %d terminated. (exited with status %d)\n",
-                i->pid,
-                i->status);
+    for(i = bg_process_info.T; i != bg_process_info.end; ++i){
+	if(WIFEXITED(i->status))
+	    printf("Background process %d terminated. (exited with status %d)\n",
+		   i->pid,
+		   WEXITSTATUS(i->status));
+	else if(WIFSIGNALED(i->status))
+	    printf("Background process %d terminated. (killed by signal %d)\n",
+		   i->pid,
+		   WTERMSIG(i->status));
+    }
     bg_process_info.end = bg_process_info.T;
 }
 
@@ -237,7 +264,7 @@ get_builtin(builtin_pair *pair, const char *cmd)
 }
 
 static int
-run_command_bg(command *c, int fd_in, int fd[2])
+run_command(command *c, int fd_in, int fd[2], int bg)
 {
 #ifdef DEBUG
     printf("Command %s, IN=%d, OUT=%d\n", *(c->argv), fd_in, fd[1]);
@@ -256,7 +283,22 @@ run_command_bg(command *c, int fd_in, int fd[2])
         return -1;
     }
     if(k == 0) {
-        if(fd[0] != STDIN_FILENO)
+	if(!bg){
+	    fg_add(getpid());
+	} else {
+	    setsid();
+	    struct sigaction act;
+	    sigemptyset(&act.sa_mask);
+	    act.sa_handler = SIG_DFL;
+	    sigaction(SIGINT, &act, NULL);
+	    bg_process_count++;
+	}
+	sigset_t mask;
+	sigemptyset(&mask);
+	sigaddset(&mask, SIGINT);
+	sigprocmask(SIG_UNBLOCK, &mask, NULL);
+
+	if(fd[0] != STDIN_FILENO)
             close(fd[0]);
         if(move_fd(fd_in, STDIN_FILENO) == -1)
             exit(EXEC_FAILURE);
@@ -279,6 +321,8 @@ run_command_bg(command *c, int fd_in, int fd[2])
         }
         exit(EXEC_FAILURE);
     } else { 
+	if(!bg)
+	    fg_add(k);
         if(fd_in != STDIN_FILENO)
             close(fd_in);
         if(fd[1] != STDOUT_FILENO)
@@ -402,11 +446,17 @@ run_pipeline(pipeline p, int bg)
     int fd[2];
     if(*(p+1) == NULL && run_single_command(*p) != -1)
         return 0;
+    sigset_t chld_mask, old;
+    sigemptyset(&chld_mask);
+    sigaddset(&chld_mask, SIGCHLD);
+    sigprocmask(SIG_BLOCK, &chld_mask, &old);
     for(c = p; *c != NULL; ++c){
         ++proc_cnt;
         if(*(c+1) != NULL){
-            if(pipe(fd) == -1)
-                return -1;
+            if(pipe(fd) == -1){
+		sigprocmask(SIG_SETMASK, &old, NULL);
+		return -1;
+	    }
 #ifdef DEBUG
             printf("Pipe: WR=>(%d|%d)=>R\n",fd[1],fd[0]);
 #endif
@@ -414,13 +464,21 @@ run_pipeline(pipeline p, int bg)
             fd[1] = STDOUT_FILENO;
             fd[0] = STDIN_FILENO;
         }
-        if(run_command_bg(*c, in_fd, fd) == -1)
+        if(run_command(*c, in_fd, fd, bg) == -1){
+	    sigprocmask(SIG_SETMASK, &old, NULL);
             return -1;
+	}
         in_fd = fd[0];
     }
     if(in_fd != STDIN_FILENO)
         close(in_fd);
-    while(proc_cnt--)
-        wait(NULL);
+    if(!bg){
+	sigset_t mask;
+	sigemptyset(&mask);
+	sigaddset(&mask, SIGINT);
+	while(!fg_empty())
+	    sigsuspend(&mask);
+    }
+    sigprocmask(SIG_SETMASK, &old, NULL);
     return 0;
 }

@@ -19,6 +19,7 @@ main(int argc, char *argv[])
     int print_prompt;
     struct stat fd_status;
     struct sigaction act;
+    sigset_t mask;
     char *nline;
     pipeline *pipe;
 
@@ -30,6 +31,10 @@ main(int argc, char *argv[])
     act.sa_handler = sigchild_handler;
     sigemptyset(&act.sa_mask);
     sigaction(SIGCHLD, &act, NULL);
+
+    sigemptyset(&mask);
+    sigaddset(&mask, SIGINT);
+    sigprocmask(SIG_BLOCK, &mask, NULL);
 
     while(1) {
         if(print_prompt){
