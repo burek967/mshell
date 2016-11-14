@@ -12,6 +12,7 @@
 #include "siparse.h"
 #include "utils.h"
 #include "builtins.h"
+#include "my_io.h"
 
 int
 main(int argc, char *argv[])
@@ -19,7 +20,6 @@ main(int argc, char *argv[])
     int print_prompt;
     struct stat fd_status;
     struct sigaction act;
-    sigset_t mask;
     char *nline;
     pipeline *pipe;
 
@@ -28,19 +28,19 @@ main(int argc, char *argv[])
 
     print_prompt = S_ISCHR(fd_status.st_mode);
 
+    /* set SIGCHILD handler */
     act.sa_handler = sigchild_handler;
     sigemptyset(&act.sa_mask);
     sigaction(SIGCHLD, &act, NULL);
 
+    /* ignore SIGINT */
     act.sa_handler = SIG_IGN;
     sigemptyset(&act.sa_mask);
     sigaction(SIGINT, &act, NULL);
-    //sigaddset(&mask, SIGINT);
-    //sigprocmask(SIG_BLOCK, &mask, NULL);
 
     while(1) {
+	print_bg_cmds(print_prompt);
         if(print_prompt){
-            print_bg_cmds();
             WRITES(STDOUT_FILENO, PROMPT_STR);
         }
 
