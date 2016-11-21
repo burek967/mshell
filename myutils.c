@@ -33,12 +33,12 @@ static struct {
     struct process_info *end;
 } bg_process_info;
 
-/* Default mode for newly created files */
+/* Default mode for newly created files (662) */
 static const mode_t def_mode = S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH;
 
 static void get_builtin(builtin_pair *, const char *);
 static int run_command(command *, int, int[2], int);
-static int run_single_command(command *);
+static int run_builtin(command *);
 static int check_pipeline(pipeline);
 static int get_redirections(redirection **);
 static int open_as(const char *, int, int);
@@ -53,8 +53,8 @@ sigchild_handler(int sig)
 {
     pid_t child;
     int stat;
-    while((child = waitpid(-1, &stat, WNOHANG)) > 0){
-	if(!fg_remove(child)){
+    while((child = waitpid(-1, &stat, WNOHANG)) > 0) {
+	if(!fg_remove(child)) {
 	    bg_add(child, stat);
 	}
     }
@@ -75,7 +75,7 @@ fg_remove(pid_t pid)
     for(cur = fg_processes.T; cur != fg_processes.end; ++cur)
         if(*cur == pid)
             break;
-    if(cur != fg_processes.end){
+    if(cur != fg_processes.end) {
         *cur = *(--fg_processes.end);
         return 1;
     }
@@ -95,7 +95,7 @@ bg_add(pid_t pid, int status)
 {
     if(bg_process_info.end == NULL)
         bg_process_info.end = bg_process_info.T;
-    if(bg_process_info.end -  bg_process_info.T >= MAX_BACKGROUND_PS)
+    if(bg_process_info.end - bg_process_info.T >= MAX_BACKGROUND_PS)
 	return;
     bg_process_info.end->pid = pid;
     bg_process_info.end->status = status;
@@ -109,23 +109,20 @@ print_bg_cmds(int chr)
     sigemptyset(&mask);
     sigaddset(&mask, SIGCHLD);
     sigprocmask(SIG_BLOCK, &mask, &old);
-    if(!chr)
-	goto end;
-    if(bg_process_info.end == NULL)
-        goto end;
-    struct process_info *i;
-    for(i = bg_process_info.T; i != bg_process_info.end; ++i){
-	if(WIFEXITED(i->status))
-	    printf("Background process %d terminated. (exited with status %d)\n",
-		   i->pid,
-		   WEXITSTATUS(i->status));
-	else if(WIFSIGNALED(i->status))
-	    printf("Background process %d terminated. (killed by signal %d)\n",
-		   i->pid,
-		   WTERMSIG(i->status));
+    if(chr && bg_process_info.end != NULL) {
+	struct process_info *i;
+	for(i = bg_process_info.T; i != bg_process_info.end; ++i) {
+	    if(WIFEXITED(i->status))
+		printf("Background process %d terminated. (exited with status %d)\n",
+		       i->pid,
+		       WEXITSTATUS(i->status));
+	    else if(WIFSIGNALED(i->status))
+		printf("Background process %d terminated. (killed by signal %d)\n",
+		       i->pid,
+		       WTERMSIG(i->status));
+	}
+	fflush(stdout);
     }
-    fflush(stdout);
-end:
     bg_process_info.end = bg_process_info.T;
     sigprocmask(SIG_SETMASK, &old, NULL);
 }
@@ -135,14 +132,14 @@ get_builtin(builtin_pair *pair, const char *cmd)
 {
     if(pair == NULL)
         return;
-    if(cmd == NULL){
+    if(cmd == NULL) {
         pair->name = NULL;
         pair->fun = NULL;
         return;
     }
     builtin_pair *i;
-    for(i = builtins_table; i->name; ++i){
-        if(strcmp(i->name, cmd) == 0){
+    for(i = builtins_table; i->name; ++i) {
+        if(strcmp(i->name, cmd) == 0) {
             pair->name = i->name;
             pair->fun = i->fun;
             return;
@@ -156,15 +153,8 @@ static int
 run_command(command *c, int fd_in, int fd[2], int bg)
 {
     pid_t k;
-    if((k = fork()) == -1){
-        if(fd[0] != STDIN_FILENO)
-            close(fd[0]);
-        if(fd[1] != STDOUT_FILENO)
-            close(fd[1]);
-        if(fd_in != STDIN_FILENO)
-            close(fd_in);
-        return -1;
-    }
+    if((k = fork()) == -1)
+	exit(3);
     if(k == 0) {
 	if(bg)
 	    setsid();
@@ -210,14 +200,14 @@ run_command(command *c, int fd_in, int fd[2], int bg)
 }
 
 static int
-run_single_command(command *c)
+run_builtin(command *c)
 {
     if(*(c->argv) == NULL)
         return 0;
     builtin_pair builtin;
     get_builtin(&builtin, *(c->argv));
-    if(builtin.fun != NULL){
-        if(builtin.fun(c->argv) != 0){
+    if(builtin.fun != NULL) {
+        if(builtin.fun(c->argv) != 0) {
             WRITES(STDERR_FILENO, "Builtin ");
             WRITESTR(STDERR_FILENO, builtin.name);
             WRITES(STDERR_FILENO, " error.\n");
@@ -248,14 +238,14 @@ get_redirections(redirection **redirs)
         return 0;
     redirection **redir;
     int flags, fd;
-    for(redir = redirs; *redir != NULL; ++redir){
+    for(redir = redirs; *redir != NULL; ++redir) {
         if(IS_RIN((*redir)->flags)) {
             flags = O_RDONLY;
             fd = STDIN_FILENO;
-        } else if(IS_RAPPEND((*redir)->flags)){
+        } else if(IS_RAPPEND((*redir)->flags)) {
             flags = O_WRONLY | O_CREAT | O_APPEND;
             fd = STDOUT_FILENO;
-        } else if(IS_ROUT((*redir)->flags)){
+        } else if(IS_ROUT((*redir)->flags)) {
             flags = O_WRONLY | O_CREAT | O_TRUNC;
             fd = STDOUT_FILENO;
         } else {
@@ -271,9 +261,9 @@ static int
 open_as(const char *file, int flags, int fd)
 {
     int fil = open(file, flags, def_mode);
-    if(fil == -1){
+    if(fil == -1) {
         WRITESTR(STDERR_FILENO, file);
-        switch(errno){
+        switch(errno) {
         case EACCES:
             WRITES(STDERR_FILENO, ": permission denied\n");
             break;
@@ -295,7 +285,7 @@ move_fd(int fildes, int fildes2)
         return fildes2;
     if(dup2(fildes,fildes2) == -1)
         return -1;
-    if(close(fildes) == -1){
+    if(close(fildes) == -1) {
         close(fildes2);
         return -1;
     }
@@ -307,7 +297,7 @@ run_pipeline(pipeline p, int bg)
 {
     if(*p == NULL)
         return 0;
-    if(check_pipeline(p) == -1){
+    if(check_pipeline(p) == -1) {
         WRITES(STDERR_FILENO, SYNTAX_ERROR_STR);
         WRITES(STDERR_FILENO, "\n");
         return -1;
@@ -315,14 +305,14 @@ run_pipeline(pipeline p, int bg)
     command **c;
     int in_fd = STDIN_FILENO;
     int fd[2];
-    if(*(p+1) == NULL && run_single_command(*p) != -1)
+    if(*(p+1) == NULL && run_builtin(*p) == 0)
         return 0;
     sigset_t chld, old;
     sigemptyset(&chld);
     sigaddset(&chld, SIGCHLD);
     sigprocmask(SIG_BLOCK, &chld, &old);
-    for(c = p; *c; ++c){
-        if(*(c+1)){
+    for(c = p; *c; ++c) {
+        if(*(c+1)) {
             if(pipe(fd) == -1)
 		goto error;
         } else {
@@ -335,7 +325,7 @@ run_pipeline(pipeline p, int bg)
     }
     if(in_fd != STDIN_FILENO)
         close(in_fd);
-    if(!bg){
+    if(!bg) {
 	sigset_t mask;
 	sigemptyset(&mask);
 	sigaddset(&mask, SIGINT);

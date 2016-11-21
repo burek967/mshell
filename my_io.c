@@ -18,7 +18,7 @@ static ssize_t read_line(struct line_buffer *);
 static ssize_t read_line_if_neccesary(struct line_buffer *);
 static int skip_to_end(struct line_buffer *);
 static void append_to_line(struct line_buffer *, const char *, size_t);
-static char * find_line_end(struct line_buffer *);
+static char * find_line_end(const struct line_buffer *);
 
 static inline void
 append_to_line(struct line_buffer *dst, const char *from, size_t n)
@@ -32,7 +32,7 @@ append_to_line(struct line_buffer *dst, const char *from, size_t n)
 }
 
 static inline char *
-find_line_end(struct line_buffer *buffer)
+find_line_end(const struct line_buffer *buffer)
 {
     char *ret = buffer->pos;
     while(ret != buffer->end && *(ret) != '\n')
