@@ -54,9 +54,9 @@ sigchild_handler(int sig)
     pid_t child;
     int stat;
     while((child = waitpid(-1, &stat, WNOHANG)) > 0) {
-	if(!fg_remove(child)) {
-	    bg_add(child, stat);
-	}
+        if(!fg_remove(child)) {
+            bg_add(child, stat);
+        }
     }
 }
 
@@ -86,7 +86,7 @@ static void
 fg_add(pid_t pid)
 {
     if(fg_processes.end == NULL)
-	fg_processes.end =fg_processes.T;
+        fg_processes.end =fg_processes.T;
     *(fg_processes.end++) = pid;
 }
 
@@ -96,7 +96,7 @@ bg_add(pid_t pid, int status)
     if(bg_process_info.end == NULL)
         bg_process_info.end = bg_process_info.T;
     if(bg_process_info.end - bg_process_info.T >= MAX_BACKGROUND_PS)
-	return;
+        return;
     bg_process_info.end->pid = pid;
     bg_process_info.end->status = status;
     ++bg_process_info.end;
@@ -110,18 +110,18 @@ print_bg_cmds(int chr)
     sigaddset(&mask, SIGCHLD);
     sigprocmask(SIG_BLOCK, &mask, &old);
     if(chr && bg_process_info.end != NULL) {
-	struct process_info *i;
-	for(i = bg_process_info.T; i != bg_process_info.end; ++i) {
-	    if(WIFEXITED(i->status))
-		printf("Background process %d terminated. (exited with status %d)\n",
-		       i->pid,
-		       WEXITSTATUS(i->status));
-	    else if(WIFSIGNALED(i->status))
-		printf("Background process %d terminated. (killed by signal %d)\n",
-		       i->pid,
-		       WTERMSIG(i->status));
-	}
-	fflush(stdout);
+        struct process_info *i;
+        for(i = bg_process_info.T; i != bg_process_info.end; ++i) {
+            if(WIFEXITED(i->status))
+                printf("Background process %d terminated. (exited with status %d)\n",
+                       i->pid,
+                       WEXITSTATUS(i->status));
+            else if(WIFSIGNALED(i->status))
+                printf("Background process %d terminated. (killed by signal %d)\n",
+                       i->pid,
+                       WTERMSIG(i->status));
+        }
+        fflush(stdout);
     }
     bg_process_info.end = bg_process_info.T;
     sigprocmask(SIG_SETMASK, &old, NULL);
@@ -154,17 +154,21 @@ run_command(command *c, int fd_in, int fd[2], int bg)
 {
     pid_t k;
     if((k = fork()) == -1)
-	exit(3);
+        exit(3);
     if(k == 0) {
-	if(bg)
-	    setsid();
+        if(bg)
+            setsid();
 
-	struct sigaction act;
-	sigemptyset(&act.sa_mask);
-	act.sa_handler = SIG_DFL;
-	sigaction(SIGINT, &act, NULL);
+        /* set default SIGINT and SIGCHLD handler, unblock all signals */
+        struct sigaction act;
+        sigemptyset(&act.sa_mask);
+        act.sa_handler = SIG_DFL;
+        sigaction(SIGINT, &act, NULL);
+        sigaction(SIGCHLD, &act, NULL);
+        sigprocmask(SIG_SETMASK, &act.sa_mask, NULL);
 
-	if(fd[0] != STDIN_FILENO)
+        /* set file descriptors */
+        if(fd[0] != STDIN_FILENO)
             close(fd[0]);
         if(move_fd(fd_in, STDIN_FILENO) == -1)
             exit(EXEC_FAILURE);
@@ -189,8 +193,8 @@ run_command(command *c, int fd_in, int fd[2], int bg)
         }
         exit(EXEC_FAILURE);
     } else { 
-	if(!bg)
-	    fg_add(k);
+        if(!bg)
+            fg_add(k);
         if(fd_in != STDIN_FILENO)
             close(fd_in);
         if(fd[1] != STDOUT_FILENO)
@@ -314,23 +318,23 @@ run_pipeline(pipeline p, int bg)
     for(c = p; *c; ++c) {
         if(*(c+1)) {
             if(pipe(fd) == -1)
-		goto error;
+                goto error;
         } else {
             fd[1] = STDOUT_FILENO;
             fd[0] = STDIN_FILENO;
         }
         if(run_command(*c, in_fd, fd, bg) == -1)
-	    goto error;
+            goto error;
         in_fd = fd[0];
     }
     if(in_fd != STDIN_FILENO)
         close(in_fd);
     if(!bg) {
-	sigset_t mask;
-	sigemptyset(&mask);
-	sigaddset(&mask, SIGINT);
-	while(!fg_empty())
-	    sigsuspend(&mask);
+        sigset_t mask;
+        sigemptyset(&mask);
+        sigaddset(&mask, SIGINT);
+        while(!fg_empty())
+            sigsuspend(&mask);
     }
     sigprocmask(SIG_SETMASK, &old, NULL);
     return 0;

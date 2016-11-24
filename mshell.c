@@ -23,6 +23,9 @@ main(int argc, char *argv[])
     char *nline;
     pipeline *pipe;
 
+    act.sa_flags = 0;
+    sigemptyset(&act.sa_mask);
+
     if(fstat(STDOUT_FILENO, &fd_status) == -1)
         exit(2);
 
@@ -30,12 +33,10 @@ main(int argc, char *argv[])
 
     /* set SIGCHILD handler */
     act.sa_handler = sigchild_handler;
-    sigemptyset(&act.sa_mask);
     sigaction(SIGCHLD, &act, NULL);
 
     /* ignore SIGINT */
     act.sa_handler = SIG_IGN;
-    sigemptyset(&act.sa_mask);
     sigaction(SIGINT, &act, NULL);
 
     while(1) {
