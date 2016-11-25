@@ -17,19 +17,19 @@
 int
 main(int argc, char *argv[])
 {
-    int print_prompt;
+    int print_prompt, line_ok;
     struct stat fd_status;
     struct sigaction act;
     char *nline;
     pipeline *pipe;
 
-    act.sa_flags = 0;
-    sigemptyset(&act.sa_mask);
-
     if(fstat(STDOUT_FILENO, &fd_status) == -1)
         exit(2);
 
     print_prompt = S_ISCHR(fd_status.st_mode);
+
+    act.sa_flags = 0;
+    sigemptyset(&act.sa_mask);
 
     /* set SIGCHILD handler */
     act.sa_handler = sigchild_handler;
@@ -40,17 +40,16 @@ main(int argc, char *argv[])
     sigaction(SIGINT, &act, NULL);
 
     while(1) {
-	print_bg_cmds(print_prompt);
-        if(print_prompt){
+        print_bg_cmds(print_prompt);
+        if(print_prompt)
             WRITES(STDOUT_FILENO, PROMPT_STR);
-        }
 
         nline = next_line();
         if(nline == NULL) {
             WRITES(STDERR_FILENO, SYNTAX_ERROR_STR);
             WRITES(STDERR_FILENO, "\n");
             continue;
-        }   
+        }
         if(end_of_input())
             break;
         
@@ -62,7 +61,18 @@ main(int argc, char *argv[])
         }
         if(l->pipelines == NULL)
             continue;
-        for(pipe = l->pipelines; *pipe != NULL; ++pipe)
+        line_ok = 1;
+        for(pipe = l->pipelines; *pipe; ++pipe)
+            if(check_pipeline(*pipe) == -1) {
+                line_ok = 0;
+                break;
+            }
+        if(!line_ok) {
+            WRITES(STDERR_FILENO, SYNTAX_ERROR_STR);
+            WRITES(STDERR_FILENO, "\n");
+            continue;
+        }
+        for(pipe = l->pipelines; *pipe; ++pipe)
             run_pipeline(*pipe, (l->flags == LINBACKGROUND));
     }
     return 0;

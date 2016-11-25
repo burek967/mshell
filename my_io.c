@@ -23,7 +23,7 @@ static char * find_line_end(const struct line_buffer *);
 static inline void
 append_to_line(struct line_buffer *dst, const char *from, size_t n)
 {
-    if(n + (dst->end - dst->line) > MAX_LINE_LENGTH){
+    if(n + (dst->end - dst->line) > MAX_LINE_LENGTH) {
         dst->end = dst->line;
     } else {
         memcpy(dst->end, from, n*sizeof(char));
@@ -52,7 +52,7 @@ static ssize_t
 read_line(struct line_buffer *buffer)
 {
     ssize_t status = read(STDIN_FILENO, buffer->line, MAX_LINE_LENGTH);
-    if(status < 0){
+    if(status < 0) {
         if(errno == EINTR)
             return read_line(buffer);
         return status;
@@ -67,9 +67,9 @@ skip_to_end(struct line_buffer *buffer)
 {
     char *x;
     int k;
-    if(buffer->pos != NULL){
+    if(buffer->pos != NULL) {
         x = find_line_end(buffer);
-        if(x != buffer->end){
+        if(x != buffer->end) {
             buffer->pos = x+1;
             return 0;
         }
@@ -93,14 +93,14 @@ next_line()
     ssize_t l = read_line_if_neccesary(&prim_buf);
     if(l < 0)
         return NULL;
-    if(l == 0){
+    if(l == 0) {
         prim_buf.line[0] = '\0';
         return prim_buf.line;
     }
 
     char *ret = find_line_end(&prim_buf);
 
-    if(ret != prim_buf.end){
+    if(ret != prim_buf.end) {
         *ret = '\0';
         char *x = prim_buf.pos;
         prim_buf.pos = ret+1;
@@ -114,17 +114,16 @@ next_line()
             return NULL;
         ret = find_line_end(&prim_buf);
         append_to_line(&snd_buf, prim_buf.pos, ret-prim_buf.pos);
-        if(snd_buf.end == snd_buf.line){
+        if(snd_buf.end == snd_buf.line) {
             skip_to_end(&prim_buf);
             return NULL;
         }
-        if(ret != prim_buf.end){
+        if(ret != prim_buf.end) {
             *(snd_buf.end) = '\0';
             prim_buf.pos = ret+1;
             return snd_buf.line;
         }
     }
-    return NULL;
 }
 
 int
